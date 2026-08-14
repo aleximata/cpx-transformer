@@ -61,7 +61,10 @@ def init_database():
     # Verificar
     cursor.execute("SELECT id, username, is_admin FROM users WHERE username = 'admin'")
     admin = cursor.fetchone()
-    print(f"📊 Admin: ID={admin[0]}, Usuario={admin[1]}, Admin={admin[2]}")
+    if admin:
+        print(f"📊 Admin: ID={admin[0]}, Usuario={admin[1]}, Admin={admin[2]}")
+    else:
+        print("❌ Error: Admin no encontrado")
     
     conn.commit()
     conn.close()
