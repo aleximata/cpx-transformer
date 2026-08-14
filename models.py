@@ -1,6 +1,6 @@
+import hashlib
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import UserMixin
-from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
 
 db = SQLAlchemy()
@@ -18,10 +18,10 @@ class User(UserMixin, db.Model):
     last_login = db.Column(db.DateTime)
     
     def set_password(self, password):
-        self.password_hash = generate_password_hash(password)
+        self.password_hash = hashlib.sha256(password.encode()).hexdigest()
     
     def check_password(self, password):
-        return check_password_hash(self.password_hash, password)
+        return self.password_hash == hashlib.sha256(password.encode()).hexdigest()
     
     def __repr__(self):
         return f'<Usuario {self.username}>'
@@ -38,3 +38,6 @@ class LinkHistory(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     user = db.relationship('User', backref='links')
+    
+    def __repr__(self):
+        return f'<Historial {self.id}>'
