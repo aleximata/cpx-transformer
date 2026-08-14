@@ -1,0 +1,6 @@
+[build]
+  install_cmd = "pip install -r requirements.txt"
+  build_cmd = ""
+
+[start]
+  cmd = "python app.py"
