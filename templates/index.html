@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <h2 class="card-title">🔗 Transformador de Links CPX</h2>
+            <p class="text-muted">
+                Ingresa el link original de CPX-Research y el programa lo transformará automáticamente.
+                <br>
+                <small>Tipos soportados: pa=7, 11, 16, 29, 30, 38, 41, 43</small>
+            </p>
+            
+            <form method="POST" action="{{ url_for('transform') }}">
+                {{ form.hidden_tag() }}
+                <div class="mb-3">
+                    {{ form.original_link.label(class="form-label") }}
+                    {{ form.original_link(class="form-control", rows="4", placeholder="Pega aquí el link de CPX-Research...") }}
+                </div>
+                <button type="submit" class="btn btn-primary">✨ Transformar Link</button>
+            </form>
+        </div>
+    </div>
+</div>
+
+{% if resultado %}
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <h3 style="color: #4ade80;">✅ Resultado</h3>
+            
+            <div class="result-box">
+                <div class="text-muted" style="font-size: 12px;">Tipo de Link</div>
+                <div><strong>pa={{ resultado.pa }}</strong></div>
+            </div>
+            
+            <div class="result-box">
+                <div class="text-muted" style="font-size: 12px;">Link Transformado</div>
+                <div class="link">{{ resultado.transformado }}</div>
+                <button class="btn btn-primary mt-2" onclick="copiarLink('{{ resultado.transformado }}')">
+                    📋 Copiar
+                </button>
+            </div>
+            
+            {% if resultado.cambios %}
+            <div class="result-box">
+                <div class="text-muted" style="font-size: 12px;">Cambios Aplicados</div>
+                <ul>
+                    {% for cambio in resultado.cambios %}
+                        <li>{{ cambio }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+            
+            <div class="result-box">
+                <div class="text-muted" style="font-size: 12px;">Link Original</div>
+                <div style="color: #a8a8b3; font-size: 12px; word-break: break-all;">{{ resultado.original }}</div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<script>
+function copiarLink(link) {
+    navigator.clipboard.writeText(link).then(function() {
+        alert('✅ Link copiado al portapapeles');
+    }, function() {
+        var textarea = document.createElement('textarea');
+        textarea.value = link;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+        alert('✅ Link copiado al portapapeles');
+    });
+}
+</script>
+{% endblock %}
