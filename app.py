@@ -1,21 +1,37 @@
-# ===== FORMULARIOS =====
-from flask_wtf import FlaskForm
-from wtforms import StringField, PasswordField, SubmitField, TextAreaField, BooleanField
-from wtforms.validators import DataRequired, Email, Length, EqualTo
+from flask import Flask
+from flask_sqlalchemy import SQLAlchemy
+import os
+import hashlib
 
-class LoginForm(FlaskForm):
-    username = StringField('Usuario', validators=[DataRequired()])
-    password = PasswordField('Contraseña', validators=[DataRequired()])
-    remember_me = BooleanField('Recordarme')
-    submit = SubmitField('Iniciar Sesión')
+app = Flask(__name__)
+app.config['SECRET_KEY'] = 'clave-secreta-12345'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:////tmp/prueba.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-class RegisterForm(FlaskForm):
-    username = StringField('Usuario', validators=[DataRequired(), Length(min=3, max=50)])
-    email = StringField('Email', validators=[DataRequired(), Email()])
-    password = PasswordField('Contraseña', validators=[DataRequired(), Length(min=6)])
-    password2 = PasswordField('Confirmar Contraseña', validators=[DataRequired(), EqualTo('password')])
-    submit = SubmitField('Registrarme')
+db = SQLAlchemy(app)
 
-class LinkTransformForm(FlaskForm):
-    original_link = TextAreaField('Link Original', validators=[DataRequired()])
-    submit = SubmitField('Transformar Link')
+class User(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(50), unique=True)
+    password = db.Column(db.String(100))
+
+@app.route('/')
+def home():
+    return "✅ app con DB funcionando"
+
+@app.route('/init')
+def init():
+    try:
+        db.create_all()
+        return "✅ Base de datos creada"
+    except Exception as e:
+        return f"❌ Error: {str(e)}"
+
+@app.route('/test')
+def test():
+    return "✅ Test OK"
+
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 8080))
+    print(f'🚀 Servidor ejecutándose en puerto {port}')
+    app.run(debug=False, host='0.0.0.0', port=port)
