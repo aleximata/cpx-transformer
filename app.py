@@ -1,6 +1,7 @@
 from flask import Flask, render_template, redirect, url_for, flash, request, jsonify
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from datetime import datetime
+import os
 
 from config import Config
 from models import db, User, LinkHistory
@@ -24,7 +25,25 @@ login_manager.login_message = 'Por favor, inicia sesión para continuar.'
 def load_user(user_id):
     return User.query.get(int(user_id))
 
-# ===== RUTAS =====
+# ===== RUTAS DE PRUEBA =====
+
+@app.route('/test')
+def test():
+    """Ruta de prueba para verificar que el servidor funciona"""
+    return "¡El servidor está funcionando correctamente!"
+
+@app.route('/test-db')
+def test_db():
+    """Ruta de prueba para verificar la base de datos"""
+    try:
+        with app.app_context():
+            # Intentar crear las tablas si no existen
+            db.create_all()
+            return "✅ Base de datos funcionando correctamente"
+    except Exception as e:
+        return f"❌ Error en la base de datos: {str(e)}"
+
+# ===== RUTAS PRINCIPALES =====
 
 @app.route('/')
 @login_required
@@ -56,7 +75,7 @@ def transform():
             db.session.add(historial)
             db.session.commit()
         except Exception as e:
-            print(f'Error: {e}')
+            print(f'Error guardando historial: {e}')
             db.session.rollback()
         
         if resultado['success']:
@@ -178,29 +197,54 @@ def admin_user_action(user_id, action):
 def not_found(error):
     return render_template('404.html'), 404
 
+@app.errorhandler(500)
+def internal_error(error):
+    db.session.rollback()
+    flash('❌ Error interno del servidor. Por favor, intenta de nuevo.', 'danger')
+    return redirect(url_for('index'))
+
 # ===== INICIALIZAR BASE DE DATOS =====
 def init_db():
     with app.app_context():
-        db.create_all()
+        try:
+            db.create_all()
+            print('✅ Base de datos inicializada correctamente')
+        except Exception as e:
+            print(f'❌ Error al inicializar la base de datos: {e}')
+            return
         
-        admin_email = app.config.get('ADMIN_EMAIL', 'admin@cpx.com')
-        admin_user = User.query.filter_by(email=admin_email).first()
-        
-        if not admin_user:
-            admin_user = User(
-                username='admin',
-                email=admin_email,
-                is_admin=True,
-                is_active=True
-            )
-            admin_user.set_password(app.config.get('ADMIN_PASSWORD', 'admin123'))
-            db.session.add(admin_user)
-            db.session.commit()
-            print('✅ Usuario administrador creado')
-            print(f'   Email: {admin_email}')
-            print(f'   Contraseña: {app.config.get("ADMIN_PASSWORD", "admin123")}')
+        try:
+            admin_email = app.config.get('ADMIN_EMAIL', 'admin@cpx.com')
+            admin_user = User.query.filter_by(email=admin_email).first()
+            
+            if not admin_user:
+                admin_user = User(
+                    username='admin',
+                    email=admin_email,
+                    is_admin=True,
+                    is_active=True
+                )
+                admin_user.set_password(app.config.get('ADMIN_PASSWORD', 'admin123'))
+                db.session.add(admin_user)
+                db.session.commit()
+                print('✅ Usuario administrador creado')
+                print(f'   Email: {admin_email}')
+                print(f'   Contraseña: {app.config.get("ADMIN_PASSWORD", "admin123")}')
+            else:
+                print('✅ Usuario administrador ya existe')
+        except Exception as e:
+            print(f'❌ Error al crear usuario admin: {e}')
 
 # ===== EJECUTAR =====
 if __name__ == '__main__':
+    # Puerto dinámico para Railway
+    port = int(os.environ.get('PORT', 8080))
+    
     init_db()
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    print('=' * 50)
+    print(f'🚀 Servidor ejecutándose en: http://localhost:{port}')
+    print('   Presiona Ctrl+C para detener')
+    print('=' * 50)
+    
+    # En producción, debug=False
+    app.run(debug=False, host='0.0.0.0', port=port)
