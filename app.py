@@ -76,23 +76,23 @@ class LinkTransformForm(FlaskForm):
     original_link = TextAreaField('Link Original', validators=[DataRequired()])
     submit = SubmitField('Transformar Link')
 
-# ===== FUNCIÓN DE TRANSFORMACIÓN CON TABLA COMPLETA =====
+# ===== FUNCIÓN DE TRANSFORMACIÓN COMPLETA =====
 def transformar_link(link_original, modo='auto'):
     """
     Transforma links de CPX-Research según el parámetro pa
-    Modo: 'auto' (transformación automática) o 'aprobacion' (genera link de aprobación)
     
     TABLA DE TRANSFORMACIONES:
-    | Tipo | pa  | Estado Original → Estado de Aprobación |
-    |------|-----|----------------------------------------|
-    | 1    | 38  | status=t → status=c                    |
-    | 2    | 30  | status=X → status=1                    |
-    | 3    | 43  | status=X → status=1                    |
-    | 4    | 16  | status=terminate → status=complete     |
-    | 5    | 41  | status=t → status=c                    |
-    | 6    | 29  | status=complete (ya aprobado)          |
-    | 7    | 11  | status=T → status=S                    |
+    | Tipo | pa  | Transformación |
+    |------|-----|----------------|
+    | 1    | 38  | status=t → status=c, isc=5104 → 1000, elimina TermedQuotaID |
+    | 2    | 30  | status=X → status=1, disposition=X → 1 |
+    | 3    | 43  | status=X → status=1 |
+    | 4    | 16  | status=terminate → status=complete |
+    | 5    | 41  | status=t → status=c |
+    | 6    | 29  | Elimina parámetros de redirección |
+    | 7    | 11  | status=T → status=S, id=44 → id=10 |
     | 8    | 7   | status=quality_terminate → quality_complete |
+    | 9    | 34  | status=2 → status=1, termreason vacío, dquestionid vacío |
     """
     try:
         parsed = urlparse(link_original)
@@ -122,25 +122,25 @@ def transformar_link(link_original, modo='auto'):
             if 'disposition' in params_clean and params_clean['disposition'] != '1':
                 params_clean['disposition'] = '1'
                 transformado = True
-                cambios.append(f'disposition: {params_clean["disposition"]} → 1')
+                cambios.append(f'disposition: → 1')
             if 'status' in params_clean and params_clean['status'] != '1':
                 params_clean['status'] = '1'
                 transformado = True
-                cambios.append(f'status: {params_clean["status"]} → 1')
+                cambios.append(f'status: → 1')
         
         # ===== TIPO 3: pa=43 =====
         elif pa == '43':
             if 'status' in params_clean and params_clean['status'] != '1':
                 params_clean['status'] = '1'
                 transformado = True
-                cambios.append(f'status: {params_clean["status"]} → 1')
+                cambios.append(f'status: → 1')
         
         # ===== TIPO 4: pa=16 =====
         elif pa == '16':
             if 'status' in params_clean and params_clean['status'] != 'complete':
                 params_clean['status'] = 'complete'
                 transformado = True
-                cambios.append(f'status: {params_clean["status"]} → complete')
+                cambios.append(f'status: → complete')
         
         # ===== TIPO 5: pa=41 =====
         elif pa == '41':
@@ -169,11 +169,6 @@ def transformar_link(link_original, modo='auto'):
                     del params_clean[param]
                     transformado = True
                     cambios.append(f'Eliminado {param}')
-            # Si está en modo aprobación, asegurar status=complete
-            if modo == 'aprobacion' and params_clean.get('status') != 'complete':
-                params_clean['status'] = 'complete'
-                transformado = True
-                cambios.append('status: → complete (aprobación)')
         
         # ===== TIPO 7: pa=11 =====
         elif pa == '11':
@@ -193,9 +188,28 @@ def transformar_link(link_original, modo='auto'):
                 transformado = True
                 cambios.append('status: quality_terminate → quality_complete')
         
+        # ===== TIPO 9: pa=34 (NUEVO) =====
+        elif pa == '34':
+            # Cambiar status a 1
+            if 'status' in params_clean and params_clean['status'] != '1':
+                params_clean['status'] = '1'
+                transformado = True
+                cambios.append(f'status: {params_clean["status"]} → 1')
+            
+            # Eliminar el valor de termreason (dejarlo vacío)
+            if 'termreason' in params_clean:
+                params_clean['termreason'] = ''
+                transformado = True
+                cambios.append('termreason: eliminado (vacío)')
+            
+            # Asegurar que dquestionid también esté vacío si existe
+            if 'dquestionid' in params_clean:
+                params_clean['dquestionid'] = ''
+                transformado = True
+                cambios.append('dquestionid: vacío')
+        
         # ===== SI ES MODO APROBACIÓN, FORZAR EL STATUS CORRECTO =====
-        if modo == 'aprobacion' and pa in ['38', '30', '43', '16', '41', '11', '7']:
-            # Mapeo de estados de aprobación por tipo
+        if modo == 'aprobacion' and pa in ['38', '30', '43', '16', '41', '11', '7', '34']:
             estados_aprobacion = {
                 '38': 'c',
                 '30': '1',
@@ -203,7 +217,8 @@ def transformar_link(link_original, modo='auto'):
                 '16': 'complete',
                 '41': 'c',
                 '11': 'S',
-                '7': 'quality_complete'
+                '7': 'quality_complete',
+                '34': '1'
             }
             if pa in estados_aprobacion and params_clean.get('status') != estados_aprobacion[pa]:
                 params_clean['status'] = estados_aprobacion[pa]
@@ -250,7 +265,6 @@ def transformar_link(link_original, modo='auto'):
 @login_required
 def index():
     form = LinkTransformForm()
-    # Obtener historial del usuario
     historial = LinkHistory.query.filter_by(user_id=current_user.id).order_by(LinkHistory.created_at.desc()).limit(20).all()
     return render_template('index.html', form=form, user=current_user, historial=historial)
 
@@ -287,7 +301,6 @@ def transform():
         else:
             flash('ℹ️ No se encontraron cambios para aplicar.', 'info')
         
-        # Obtener historial actualizado
         historial = LinkHistory.query.filter_by(user_id=current_user.id).order_by(LinkHistory.created_at.desc()).limit(20).all()
         return render_template('index.html', form=form, resultado=resultado, user=current_user, historial=historial)
     
@@ -297,14 +310,12 @@ def transform():
 @app.route('/api/transform', methods=['POST'])
 @login_required
 def api_transform():
-    """API para transformar links desde JavaScript"""
     data = request.get_json()
     if not data or 'link' not in data:
         return jsonify({'error': 'No se proporcionó link'}), 400
     
     link_original = data['link'].strip()
     modo = data.get('modo', 'auto')
-    
     resultado = transformar_link(link_original, modo=modo)
     
     try:
@@ -325,7 +336,6 @@ def api_transform():
 @app.route('/api/analyze', methods=['POST'])
 @login_required
 def api_analyze():
-    """API para análisis automático de links"""
     try:
         data = request.get_json()
         if not data or 'link' not in data:
@@ -362,7 +372,6 @@ def api_analyze():
 @app.route('/api/approval', methods=['POST'])
 @login_required
 def api_approval():
-    """API para generar link de aprobación"""
     try:
         data = request.get_json()
         if not data or 'link' not in data:
