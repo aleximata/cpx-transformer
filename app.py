@@ -79,9 +79,9 @@ class LinkTransformForm(FlaskForm):
 # ===== FUNCIÓN DE TRANSFORMACIÓN COMPLETA =====
 def transformar_link(link_original, modo='auto'):
     """
-    Transforma links de CPX-Research según el parámetro pa
+    Transforma links de CPX-Research y Walr
     
-    TABLA DE TRANSFORMACIONES:
+    TABLA DE TRANSFORMACIONES CPX:
     | Tipo | pa  | Transformación |
     |------|-----|----------------|
     | 1    | 38  | status=t → status=c, isc=5104 → 1000, elimina TermedQuotaID |
@@ -93,7 +93,66 @@ def transformar_link(link_original, modo='auto'):
     | 7    | 11  | status=T → status=S, id=44 → id=10 |
     | 8    | 7   | status=quality_terminate → quality_complete |
     | 9    | 34  | status=2 → status=1, termreason vacío, dquestionid vacío |
+    
+    TRANSFORMACIONES WALR:
+    | Tipo | URL | Transformación |
+    |------|-----|----------------|
+    | 1    | welcome.walr.com | surveyout → sentry, elimina status/reason/ac/atcs, sentry_status=2 → 1 |
     """
+    
+    # ===== DETECTAR WALR =====
+    if 'welcome.walr.com' in link_original:
+        try:
+            parsed = urlparse(link_original)
+            params = parse_qs(parsed.query)
+            params_clean = {k: v[0] if v else '' for k, v in params.items()}
+            
+            # Cambiar la ruta de /surveyout a /sentry
+            nueva_path = parsed.path.replace('/surveyout', '/sentry')
+            
+            # Eliminar parámetros no deseados
+            parametros_a_eliminar = ['status', 'reason', 'ac', 'atcs']
+            for param in parametros_a_eliminar:
+                if param in params_clean:
+                    del params_clean[param]
+            
+            # Cambiar sentry_status a 1
+            if 'sentry_status' in params_clean and params_clean['sentry_status'] != '1':
+                params_clean['sentry_status'] = '1'
+            
+            # Reconstruir URL
+            nueva_query = urlencode(params_clean, doseq=False)
+            nueva_url = urlunparse((parsed.scheme, parsed.netloc, nueva_path, 
+                                   parsed.params, nueva_query, parsed.fragment))
+            
+            return {
+                'original': link_original,
+                'transformado': nueva_url,
+                'success': True,
+                'cambios': [
+                    'surveyout → sentry',
+                    'Eliminados status, reason, ac, atcs',
+                    'sentry_status: 2 → 1'
+                ],
+                'pa': 'walr',
+                'params': params_clean,
+                'es_aprobacion': True,
+                'modo': modo
+            }
+        except Exception as e:
+            return {
+                'error': str(e),
+                'original': link_original,
+                'transformado': link_original,
+                'success': False,
+                'cambios': [],
+                'pa': 'walr_error',
+                'params': {},
+                'es_aprobacion': False,
+                'modo': 'error'
+            }
+    
+    # ===== CPX-RESEARCH =====
     try:
         parsed = urlparse(link_original)
         params = parse_qs(parsed.query)
@@ -188,7 +247,7 @@ def transformar_link(link_original, modo='auto'):
                 transformado = True
                 cambios.append('status: quality_terminate → quality_complete')
         
-        # ===== TIPO 9: pa=34 (NUEVO) =====
+        # ===== TIPO 9: pa=34 =====
         elif pa == '34':
             # Cambiar status a 1
             if 'status' in params_clean and params_clean['status'] != '1':
@@ -276,8 +335,8 @@ def transform():
         link_original = form.original_link.data.strip()
         modo = request.form.get('modo', 'auto')
         
-        if 'redirect.cpx-research.com' not in link_original:
-            flash('❌ El link no parece ser de CPX-Research.', 'warning')
+        if 'redirect.cpx-research.com' not in link_original and 'welcome.walr.com' not in link_original:
+            flash('❌ El link no parece ser de CPX-Research o Walr.', 'warning')
             return redirect(url_for('index'))
         
         resultado = transformar_link(link_original, modo=modo)
